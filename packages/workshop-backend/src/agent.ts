@@ -29,7 +29,7 @@ import type {
 import {
   buildCompactionState, buildSummaryPrompt, chatChangeStatuses, COMPACTION_SYSTEM_PROMPT,
   estimateProjectionTokens, findCompactionBoundary, findProtectedFromSequence,
-  getModelTokenLimits, isCompactionTurn, protectRetainedReverts, shouldCompactChat,
+  foldProposedChanges, getModelTokenLimits, isCompactionTurn, shouldCompactChat,
   type CompactionProjectionMessage,
 } from "./agent-compaction";
 import { formatGrep, type GrepScan } from "./grep";
@@ -2587,17 +2587,27 @@ async function runAgentPass(
           name: "observeUserChanges",
           arguments: {},
         }], handle.model, msgTimestamp));
-        let revertedFromChangeId = changeIdMap.get(msg.revertFrom)!;
+        // Name the first change the revert discarded: the earliest batch still proposed when it
+        // was recorded. A revert reaching into the summarized turns can't be named that way, since
+        // the batches it may have discarded there aren't replayed.
+        let revertsSummarizedTurns = msg.revertFrom < (checkpoint?.compactedTo ?? 0);
+        let firstReverted = revertsSummarizedTurns ? undefined
+            : foldProposedChanges(chatMessages.slice(0, msgIndex))
+                .find(batch => batch.sequence >= msg.revertFrom);
+        let revertedFromChangeId = firstReverted && changeIdMap.get(firstReverted.sequence);
         modelMessages.push({
           role: "toolResult",
           toolCallId,
           toolName: "observeUserChanges",
           content: [{
             type: "text",
-            text:
-                `The user reverted all changes starting from change ${revertedFromChangeId} ` +
-                `onward. The files have returned to the state they were in immediately ` +
-                `before change ${revertedFromChangeId}.`,
+            text: revertsSummarizedTurns
+                ? "The user reverted all pending changes from a point in the summarized " +
+                  "earlier turns onward."
+                : revertedFromChangeId === undefined ? "The user discarded pending changes."
+                : `The user reverted all changes starting from change ${revertedFromChangeId} ` +
+                  `onward. The files have returned to the state they were in immediately ` +
+                  `before change ${revertedFromChangeId}.`,
           }],
           isError: false,
           timestamp: msgTimestamp,
@@ -3018,7 +3028,6 @@ async function runAgentPass(
     let compactedTo = findCompactionBoundary(
         projection, inputBudget, contextTokens,
         checkpoint?.compactedTo, findProtectedFromSequence(chatMessages));
-    compactedTo = protectRetainedReverts(compactedTo, chatMessages, checkpoint?.compactedTo);
     if (compactedTo !== undefined) {
       emitStreamEvent({type: "compacting"});
       try {

@@ -50,7 +50,7 @@ import { GitImpl } from "./git-binding";
 import { scanWorkpieceForGrep, type GrepScan } from "./grep";
 import WORKTREE_BINDING_TYPES from "./worktree-binding.txt";
 import { deploymentOutputForBlueprint, FormatOffer, listFormatOffers, readAdminConfig } from "./admin-config";
-import { chatChangeStatuses } from "./agent-compaction";
+import { chatChangeStatuses, foldCompactedCode } from "./agent-compaction";
 import { ambientGatekeeperMode } from "./provisioning-policy";
 import {
   blueprintContentKey, deleteBlueprintContent, readBlueprintRelease, sanitizeBlueprintOutput,
@@ -4164,7 +4164,7 @@ class OverseerImpl implements AgentHooks {
 
     let timestamp = this.getChatTimestamp();
 
-    this.storage.chats.put({
+    let revertMessage: AiChatMessage = {
       chatId,
       sequence: this.nextChatSequence(chatId),
       timestamp,
@@ -4172,7 +4172,8 @@ class OverseerImpl implements AgentHooks {
 
       type: "revert",
       revertFrom,
-    });
+    };
+    this.storage.chats.put(revertMessage);
 
     // Settle the pins, one record per field. `declaredPins` reads the log as it now stands --
     // including the revert message just written -- so a pin's base is its last surviving
@@ -4242,7 +4243,7 @@ class OverseerImpl implements AgentHooks {
     meta.codeBase = codeBase;
 
     meta.lastActive = timestamp;
-    this.rollbackChatCompaction(meta, revertFrom);
+    this.refoldChatCompactions(chatId, revertFrom, [...messages, revertMessage]);
     this.storage.chatMeta.put(meta);
     this.proposedChangesChanged(chatId);
 
@@ -6400,8 +6401,8 @@ class OverseerImpl implements AgentHooks {
     return undefined;
   }
 
-  // Returns the newest checkpoint whose boundary is at or before `sequence`. Rollback uses the
-  // inclusive bound because a checkpoint at `revertFrom` covers only unaffected earlier messages.
+  // Returns the newest checkpoint whose boundary is at or before `sequence`. A revert's refold uses
+  // the inclusive bound because a checkpoint at `revertFrom` covers only unaffected earlier messages.
   #getChatCompactionAtOrBefore(
       chatId: number, sequence: number): CompactionCheckpoint | undefined {
     return this.getChatCompactionBelow(chatId, sequence + 1);
@@ -6426,8 +6427,8 @@ class OverseerImpl implements AgentHooks {
   //
   // Safe to call after the summary's model I/O even though that releases the input gate: the turn
   // that produced this checkpoint is still the chat's active agent, and every operation that could
-  // invalidate it -- merge, revert, and the rollback a revert triggers -- refuses while a turn is
-  // active. So the checkpoint cannot be stale by the time it lands.
+  // invalidate it -- merge and revert -- refuses while a turn is active. So the checkpoint cannot
+  // be stale by the time it lands.
   commitChatCompaction(chatId: number, checkpoint: CompactionCheckpoint): void {
     this.ctx.storage.transactionSync(() => {
       let meta = this.storage.chatMeta.get(chatId);
@@ -6441,27 +6442,25 @@ class OverseerImpl implements AgentHooks {
     });
   }
 
-  // Points the chat at the newest checkpoint a revert leaves intact. A revert erases Yjs history from
-  // `revertFrom` onward, so any checkpoint that folded in those changes can never be replayed again
-  // and is deleted; earlier ones stay, which is what lets a revert cross a boundary at all.
-  rollbackChatCompaction(meta: AiChatMetadata, revertFrom: number): void {
-    // Buffer the checkpoints first: deleting invalidates the list cursor.
-    let stale = Array.from(this.storage.chatCompactions.list({
-      prefix: chatKeyPrefix(meta.id),
-      start: chatKey(meta.id, revertFrom + 1),
+  // Refolds each checkpoint a revert reaches into, oldest first, from the one before it. A revert
+  // changes what the chat proposes, not what was said, so a checkpoint keeps its boundary and
+  // summary and only the code state foldCompactedCode derives from the log changes. `messages` is
+  // the chat's whole log, the revert included.
+  refoldChatCompactions(chatId: number, revertFrom: number, messages: AiChatMessage[]): void {
+    let previous = this.#getChatCompactionAtOrBefore(chatId, revertFrom);
+    // Buffer the checkpoints first: rewriting them while listing would disturb the cursor.
+    let affected = Array.from(this.storage.chatCompactions.list({
+      prefix: chatKeyPrefix(chatId),
+      start: chatKey(chatId, revertFrom + 1),
     }));
-    for (let checkpoint of stale) this.storage.chatCompactions.deleteRecord(checkpoint);
-
-    let previousBoundary = meta.compactedTo;
-    let checkpoint = this.#getChatCompactionAtOrBefore(meta.id, revertFrom);
-    if (checkpoint) {
-      meta.compactedTo = checkpoint.compactedTo;
-    } else {
-      delete meta.compactedTo;
-    }
-    if (meta.compactedTo !== previousBoundary) {
-      // Replay now starts further back, so the prompt is longer than the recorded total describes.
-      delete meta.totalTokens;
+    for (let checkpoint of affected) {
+      let spanStart = previous?.compactedTo ?? 0;
+      previous = {
+        ...checkpoint,
+        ...foldCompactedCode(messages.filter(message => message.sequence >= spanStart),
+                             checkpoint.compactedTo, previous),
+      };
+      this.storage.chatCompactions.put(previous);
     }
   }
 

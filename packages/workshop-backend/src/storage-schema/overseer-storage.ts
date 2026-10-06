@@ -591,9 +591,10 @@ export type ChatBindingEntry =
   | { type: "value"; messageSequence: number };
 
 /**
- * Stores replay state for one compacted chat prefix. Checkpoints are immutable, and a chat keeps
- * every one it has published, so reading history or reverting can select the newest checkpoint below
- * any sequence.
+ * Stores replay state for one compacted chat prefix. A chat keeps every checkpoint it has
+ * published, so reading history or reverting can select the newest checkpoint below any sequence.
+ * The summary never changes; a revert reaching below the boundary refolds the code state (`pins`,
+ * `epoch`, `proposedChange`) from the log.
  */
 export type CompactionCheckpoint = {
   /** Chat this checkpoint belongs to. */
@@ -1289,9 +1290,9 @@ export function makeOverseerStorage(storage: DurableObjectStorage) {
       }),
 
       // Compaction checkpoints, keyed by `chatId.compactedTo` so a chat's checkpoints sort by
-      // boundary. A chat keeps every checkpoint it has published, not just the newest: reverting
-      // across a boundary needs the one before it (see rollbackChatCompaction), and only that path
-      // and deleting the chat remove any.
+      // boundary. A chat keeps every checkpoint it has published, not just the newest: history
+      // pages back through them, and a revert across a boundary refolds from the one before it
+      // (see refoldChatCompactions). Only deleting the chat removes any.
       chatCompactions: collection<CompactionCheckpoint>()({
         primaryKey: (checkpoint) => chatKey(checkpoint.chatId, checkpoint.compactedTo),
       }),
