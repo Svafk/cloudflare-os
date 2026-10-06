@@ -3,7 +3,7 @@ import {
   validateWebFetchUrl,
   webFetch,
   formatWebFetchResult,
-  type WebFetchEnv,
+  type WebEnv,
 } from "../src/web-fetch.js";
 import { AiGatewayConfig } from "../src/ai-gateway.js";
 
@@ -12,7 +12,7 @@ import { AiGatewayConfig } from "../src/ai-gateway.js";
 // in webFetch, so the stub mirrors only that branch.
 type ToMarkdownStub = ReturnType<typeof vi.fn>;
 
-function makeEnv(toMarkdown?: ToMarkdownStub, gateway: AiGatewayConfig | null = null): WebFetchEnv {
+function makeEnv(toMarkdown?: ToMarkdownStub, gateway: AiGatewayConfig | null = null): WebEnv {
   const stub =
     toMarkdown ??
     vi.fn(async (doc: { name: string; blob: Blob }) => ({

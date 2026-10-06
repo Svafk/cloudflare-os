@@ -21,10 +21,11 @@
 import type { AiGatewayConfig } from "./ai-gateway";
 
 /**
- * The bits of the Workers AI binding and gateway config that `webFetch` needs. Kept narrow
- * so the caller can pass a stub in tests without constructing a full Cloudflare.Env.
+ * The bits of the Workers AI binding and gateway config that the public-web tools (`webFetch`
+ * and `webSearch`) need. Kept narrow so the caller can pass a stub in tests without constructing
+ * a full Cloudflare.Env.
  */
-export type WebFetchEnv = {
+export type WebEnv = {
   ai: Ai;
   gateway: AiGatewayConfig | null;
 };
@@ -192,7 +193,7 @@ function buildGatewayOptions(
 // Markdown body on success, or null if the document's MIME type isn't in the supported
 // allow-list. Throws (with a contextual error) if the conversion itself fails.
 async function convertToMarkdown(
-  env: WebFetchEnv,
+  env: WebEnv,
   bytes: Uint8Array,
   contentType: string,
   url: URL,
@@ -266,7 +267,7 @@ export function formatWebFetchResult(result: WebFetchResult): string {
 }
 
 export async function webFetch(
-  env: WebFetchEnv,
+  env: WebEnv,
   input: WebFetchInput,
 ): Promise<WebFetchResult> {
   const parsed = validateWebFetchUrl(input.url);

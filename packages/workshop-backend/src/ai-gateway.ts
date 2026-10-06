@@ -71,9 +71,9 @@ export function gatewayRunConfig(
 export class AiGatewayConfig {
   readonly gateway: string;
   /**
-   * The gateway name for Workers-AI-binding calls (webFetch's toMarkdown): binding calls only
-   * reach gateways in the Worker's own account, so this is the platform gateway whenever the
-   * binding transport is active, and unset when it isn't (see {@link binding}).
+   * The gateway name for Workers-AI-binding calls (webFetch's toMarkdown, webSearch): binding
+   * calls only reach gateways in the Worker's own account, so this is the platform gateway
+   * whenever the binding transport is active, and unset when it isn't (see {@link binding}).
    */
   readonly sameAccountGateway?: string;
   readonly accountId: string;
@@ -90,6 +90,8 @@ export class AiGatewayConfig {
    * Such a deployment opts out with the flag rather than by unbinding WORKERS_AI, because the
    * binding is not only the gateway transport: webFetch's document-to-Markdown conversion calls
    * `env.ai.toMarkdown()` through it (see web-fetch.ts), so unbinding would break that too.
+   * (webSearch's `env.ai.websearch()` is unavailable on such a deployment either way: it needs
+   * {@link sameAccountGateway}.)
    */
   readonly binding?: Ai;
   /** The providers CF_AI_GATEWAY_PROVIDERS lists, which an admin can add to (see GatewayModels). */

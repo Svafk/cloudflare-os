@@ -108,7 +108,7 @@ describe("spawned agent tools", () => {
 
     expect(offered).toEqual([[
       "createWorktree", "describeBinding", "editFile", "executeCode", "grep", "observeUserChanges",
-      "readFile", "webFetch", "writeFile",
+      "readFile", "webFetch", "webSearch", "writeFile",
     ]]);
   }));
 

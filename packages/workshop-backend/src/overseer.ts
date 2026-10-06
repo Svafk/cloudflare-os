@@ -63,7 +63,7 @@ import { encodeGitTree, gitObjectOid, parseGitCommitRefs } from "./git-codec";
 import {
   listFeaturedBlueprintsFromKv, readBlueprintKvRecord, type BlueprintKvRecord,
 } from "./storage-schema/blueprints-kv";
-import { WebFetchEnv } from "./web-fetch";
+import { WebEnv } from "./web-fetch";
 import { UserDurableObject, type UserChatContext } from "./user";
 import type { AgentSpawnerBinding, CallableAgent, SpawnCallableOptions } from "./agent-spawner-binding";
 import { recordAnalytics } from "./analytics";
@@ -5256,17 +5256,18 @@ class OverseerImpl implements AgentHooks {
     return this.#accountRequiringUseScope().has(gatekeeperId);
   }
 
-  // Provides web-fetch with the Workers AI binding and AI Gateway config it needs to call
-  // `env.WORKERS_AI.toMarkdown()`. The initiator is needed for AI Gateway metadata.
-  getWebFetchEnv(): WebFetchEnv {
+  // Provides the public-web tools (webFetch, webSearch) with the Workers AI binding and AI Gateway
+  // config they call through. Both send agent-chosen text off-platform (a URL, a search query), so
+  // this is also where a workspace that has observed restricted data is cut off from the web.
+  getWebEnv(): WebEnv {
     if (this.storage.containsRestrictedData.get()) {
-      // TODO: Disallwing fetches is a bit draconian. Ideally, we would have some way to detect
-      //   if a URL is well-known, and therefore not a leak problem. E.g. if the URL is already in
-      //   a search index, then it's not leaking anything. If we had a search provider we could
-      //   trust... for now though, we will be extra-careful specifically when prohibiting sharing.
+      // TODO: Disallowing fetches is a bit draconian. A URL that is already in a public search
+      //   index leaks nothing by itself, so fetching those could be allowed, though which of many
+      //   indexed URLs gets fetched can still carry a few bits. For now we are extra-careful
+      //   specifically when prohibiting sharing.
       throw new Error(
           "This workspace has observed sensitive data. To prevent leaks, the workspace is prohibited " +
-          "from fetching from public web sites.");
+          "from searching or fetching from the public web.");
     }
 
     return {

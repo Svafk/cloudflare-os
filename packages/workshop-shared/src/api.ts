@@ -4106,6 +4106,19 @@ export type AiToolCall = {
    */
   output?: string;
 } | {
+  toolName: "webSearch";
+  input: {
+    /** The search query, as sent to the search provider. */
+    query: string;
+  };
+
+  /**
+   * Output, if the search completed. (Otherwise, `error` should be present.) Stored so that the
+   * agent's chat history can be replayed without searching again. Formatted as a JSON array of
+   * results, then a note if some were left out (see formatWebSearchResults).
+   */
+  output?: string;
+} | {
   /** This actually shouldn't ever appear in logs unless the agent misunderstands the tool. */
   toolName: "observeUserChanges";
   input: {};
