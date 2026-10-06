@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563EB"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#7C3AED"/>
+    </marker>
+  </defs>
+
+  <rect x="0.75" y="0.75" width="958.5" height="558.5" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1.5"/>
+
+  <text x="40" y="46" font-size="20" font-weight="600" fill="#334155">What leaves the workspace</text>
+  <text x="40" y="68" font-size="13" fill="#64748B">Only the query goes out. Results come back as untrusted text.</text>
+
+  <!-- Zones -->
+  <rect x="32" y="96" width="248" height="432" rx="12" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="52" y="124" font-size="14" font-weight="600" fill="#1E3A8A">Workspace <tspan font-weight="400" fill="#64748B">(Durable Object)</tspan></text>
+
+  <rect x="480" y="96" width="272" height="312" rx="12" fill="#FFF7ED" stroke="#F6821F" stroke-width="1.5"/>
+  <text x="500" y="124" font-size="14" font-weight="600" fill="#C2410C">Cloudflare</text>
+
+  <rect x="784" y="96" width="144" height="312" rx="12" fill="#F5F3FF" stroke="#7C3AED" stroke-width="1.5"/>
+  <text x="800" y="124" font-size="14" font-weight="600" fill="#6D28D9">Third party</text>
+
+  <!-- Workspace contents -->
+  <rect x="56" y="160" width="120" height="72" rx="10" fill="#FFFFFF" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="116" y="201" font-size="14" font-weight="600" fill="#1E3A8A" text-anchor="middle">Agent</text>
+
+  <rect x="48" y="332" width="216" height="48" rx="10" fill="#FFFFFF" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="156" y="361" font-size="13" font-weight="600" fill="#1E3A8A" text-anchor="middle">JSON, whole results within 32K</text>
+  <line x1="116" y1="332" x2="116" y2="234" stroke="#2563EB" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <rect x="56" y="408" width="96" height="40" rx="10" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1.5"/>
+  <text x="104" y="433" font-size="13" fill="#334155" text-anchor="middle">Chat history</text>
+  <rect x="160" y="408" width="96" height="40" rx="10" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1.5"/>
+  <text x="208" y="433" font-size="13" fill="#334155" text-anchor="middle">Activity log</text>
+
+  <rect x="56" y="464" width="200" height="44" rx="10" fill="none" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="156" y="482" font-size="12" fill="#334155" text-anchor="middle">Gadget code: no network</text>
+  <text x="156" y="499" font-size="12" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#64748B" text-anchor="middle">globalOutbound: null</text>
+
+  <!-- Cloudflare contents -->
+  <rect x="496" y="160" width="112" height="72" rx="10" fill="#FFFFFF" stroke="#F6821F" stroke-width="1.5"/>
+  <text x="552" y="192" font-size="14" font-weight="600" fill="#C2410C" text-anchor="middle">Workers AI</text>
+  <text x="552" y="211" font-size="12" fill="#334155" text-anchor="middle">binding</text>
+
+  <rect x="632" y="160" width="104" height="72" rx="10" fill="#FFFFFF" stroke="#F6821F" stroke-width="1.5"/>
+  <text x="684" y="186" font-size="14" font-weight="600" fill="#C2410C" text-anchor="middle">AI Gateway</text>
+  <text x="684" y="205" font-size="12" fill="#334155" text-anchor="middle">Logs the query</text>
+  <text x="684" y="221" font-size="12" fill="#334155" text-anchor="middle">Bills credits</text>
+  <line x1="608" y1="196" x2="630" y2="196" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Third party contents -->
+  <rect x="800" y="160" width="112" height="72" rx="10" fill="#FFFFFF" stroke="#7C3AED" stroke-width="1.5"/>
+  <text x="856" y="192" font-size="14" font-weight="600" fill="#6D28D9" text-anchor="middle">Ceramic.ai</text>
+  <text x="856" y="211" font-size="12" fill="#334155" text-anchor="middle">ZDR</text>
+  <line x1="736" y1="196" x2="798" y2="196" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Outgoing path -->
+  <line x1="176" y1="196" x2="494" y2="196" stroke="#2563EB" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+  <text x="364" y="172" font-size="12" font-weight="600" fill="#2563EB" text-anchor="middle">query</text>
+  <text x="364" y="188" font-size="12" fill="#334155" text-anchor="middle">text the agent wrote</text>
+
+  <!-- Latch -->
+  <line x1="452" y1="220" x2="452" y2="242" stroke="#DC2626" stroke-width="1.5"/>
+  <rect x="448" y="172" width="8" height="48" rx="3" fill="#DC2626"/>
+  <rect x="288" y="242" width="184" height="68" rx="10" fill="#FEF2F2" stroke="#DC2626" stroke-width="1.5"/>
+  <text x="380" y="263" font-size="12" font-weight="600" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#DC2626" text-anchor="middle">containsRestrictedData</text>
+  <text x="380" y="281" font-size="12" fill="#334155" text-anchor="middle">latched: webSearch and</text>
+  <text x="380" y="297" font-size="12" fill="#334155" text-anchor="middle">webFetch both refused</text>
+
+  <!-- Return path -->
+  <path d="M856,232 L856,356 L266,356" fill="none" stroke="#7C3AED" stroke-width="1.5" marker-end="url(#arrow-purple)"/>
+  <text x="380" y="378" font-size="12" font-weight="600" fill="#7C3AED" text-anchor="middle">results</text>
+  <text x="380" y="394" font-size="12" fill="#334155" text-anchor="middle">untrusted page text</text>
+</svg>

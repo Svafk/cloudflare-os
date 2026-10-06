@@ -12,7 +12,7 @@ turn, the overseer calls `checkUsageAndBalance`:
 
 - **Connected, balance ≥ `$2`** → allowed, routed through the user's own account so usage bills
   their Cloudflare credits — even while free-tier allowance remains. The platform is never charged
-  for funded users, and their daily free-tier counter is left untouched.
+  for funded users' model calls, and their daily free-tier counter is left untouched.
 - **Otherwise, within the free tier** → allowed, served via the platform's configured AI Gateway
   (all providers, Workers AI included). This includes connected users whose balance is below `$2`
   (incl. $0).
@@ -23,6 +23,13 @@ The balance shown to users is read live from their Cloudflare AI Gateway billing
 (`/ai-gateway-billing/credit_balance`), cached for 5 minutes. Topping up means adding credits in the
 [Cloudflare dashboard](https://dash.cloudflare.com/?to=/:account/ai/ai-gateway) — the platform never
 holds money.
+
+Web searches (the agent's `webSearch` tool) are the exception: they always go through the
+platform's Gateway, for funded users too, and bill its credits at Ceramic's list price ($0.25 per
+1,000 searches). The search runs on the Workers AI binding, which can only reach a Gateway in the
+Worker's own account, so it can't follow a funded user's turn to their account. Their queries
+therefore also land in the platform Gateway's logs, next to the chat the platform already stores.
+See [web search](./web-search.md).
 
 ## Connecting Cloudflare
 

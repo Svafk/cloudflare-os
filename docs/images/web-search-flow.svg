@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="804" viewBox="0 0 960 804" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748B"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#DC2626"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563EB"/>
+    </marker>
+  </defs>
+
+  <rect x="0.75" y="0.75" width="958.5" height="802.5" rx="12" fill="#FFFFFF" stroke="#E5E7EB" stroke-width="1.5"/>
+
+  <text x="40" y="46" font-size="20" font-weight="600" fill="#334155">How a web search runs</text>
+  <text x="40" y="68" font-size="13" fill="#64748B">Two local checks, one platform call, one JSON answer</text>
+
+  <!-- Model call -->
+  <rect x="80" y="88" width="440" height="48" rx="10" fill="#F8FAFC" stroke="#64748B" stroke-width="1.5"/>
+  <text x="300" y="117" font-size="14" fill="#334155" text-anchor="middle">Model calls <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">webSearch({ query })</tspan></text>
+  <line x1="300" y1="136" x2="300" y2="162" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Check 1 -->
+  <rect x="80" y="164" width="440" height="60" rx="10" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="300" y="189" font-size="14" fill="#1E3A8A" text-anchor="middle"><tspan font-weight="600">Check 1</tspan>  <tspan font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13">getWebEnv()</tspan></text>
+  <text x="300" y="209" font-size="13" fill="#334155" text-anchor="middle">Workspace has observed restricted data?</text>
+  <line x1="520" y1="194" x2="578" y2="194" stroke="#DC2626" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+  <text x="549" y="186" font-size="12" font-weight="600" fill="#DC2626" text-anchor="middle">Yes</text>
+  <rect x="580" y="164" width="320" height="60" rx="10" fill="#FEF2F2" stroke="#DC2626" stroke-width="1.5"/>
+  <text x="740" y="189" font-size="14" font-weight="600" fill="#DC2626" text-anchor="middle">Refused</text>
+  <text x="740" y="209" font-size="13" fill="#334155" text-anchor="middle">No web in restricted workspaces</text>
+
+  <line x1="300" y1="224" x2="300" y2="250" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="310" y="242" font-size="12" fill="#64748B">No</text>
+
+  <!-- Check 2 -->
+  <rect x="80" y="252" width="440" height="60" rx="10" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="300" y="277" font-size="14" fill="#1E3A8A" text-anchor="middle"><tspan font-weight="600">Check 2</tspan>  Gateway route</text>
+  <text x="300" y="297" font-size="13" fill="#334155" text-anchor="middle">No AI Gateway in the Worker's own account?</text>
+  <line x1="520" y1="282" x2="578" y2="282" stroke="#DC2626" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+  <text x="549" y="274" font-size="12" font-weight="600" fill="#DC2626" text-anchor="middle">Yes</text>
+  <rect x="580" y="252" width="320" height="60" rx="10" fill="#FEF2F2" stroke="#DC2626" stroke-width="1.5"/>
+  <text x="740" y="277" font-size="14" font-weight="600" fill="#DC2626" text-anchor="middle">Refused</text>
+  <text x="740" y="297" font-size="13" fill="#334155" text-anchor="middle">Search not available on this deployment</text>
+
+  <!-- Platform boundary -->
+  <line x1="40" y1="340" x2="920" y2="340" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="920" y="332" font-size="12" font-style="italic" fill="#64748B" text-anchor="end">Nothing has left the platform above this line</text>
+
+  <line x1="300" y1="312" x2="300" y2="366" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="306" y="318" width="22" height="16" fill="#FFFFFF"/>
+  <text x="310" y="330" font-size="12" fill="#64748B">No</text>
+
+  <!-- Workers AI binding call -->
+  <rect x="80" y="368" width="440" height="64" rx="10" fill="#FFF7ED" stroke="#F6821F" stroke-width="1.5"/>
+  <text x="300" y="395" font-size="13" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#334155" text-anchor="middle">env.WORKERS_AI.websearch({ gatewayId, query,</text>
+  <text x="300" y="415" font-size="13" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" fill="#334155" text-anchor="middle">provider: "ceramic" })</text>
+  <line x1="300" y1="432" x2="300" y2="454" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- AI Gateway -->
+  <rect x="80" y="456" width="440" height="56" rx="10" fill="#FFF7ED" stroke="#F6821F" stroke-width="1.5"/>
+  <text x="300" y="479" font-size="14" font-weight="600" fill="#C2410C" text-anchor="middle">AI Gateway</text>
+  <text x="300" y="499" font-size="13" fill="#334155" text-anchor="middle">Platform, same account: logs, billing</text>
+  <line x1="300" y1="512" x2="300" y2="534" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Ceramic -->
+  <rect x="80" y="536" width="440" height="56" rx="10" fill="#F5F3FF" stroke="#7C3AED" stroke-width="1.5"/>
+  <text x="300" y="559" font-size="14" font-weight="600" fill="#6D28D9" text-anchor="middle">Ceramic.ai</text>
+  <text x="300" y="579" font-size="13" fill="#334155" text-anchor="middle">Search index, zero data retention</text>
+  <line x1="300" y1="592" x2="300" y2="622" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="310" y="612" font-size="12" fill="#64748B">Response</text>
+
+  <!-- Parse -->
+  <rect x="80" y="624" width="440" height="60" rx="10" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="300" y="649" font-size="14" font-weight="600" fill="#1E3A8A" text-anchor="middle">Parse (zod)</text>
+  <text x="300" y="669" font-size="13" fill="#334155" text-anchor="middle">title, URL, description, date</text>
+  <line x1="300" y1="684" x2="300" y2="706" stroke="#64748B" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Output -->
+  <rect x="80" y="708" width="440" height="60" rx="10" fill="#F0FDF4" stroke="#16A34A" stroke-width="1.5"/>
+  <text x="300" y="733" font-size="14" font-weight="600" fill="#15803D" text-anchor="middle">JSON results, whole ones while they fit in 32K</text>
+  <text x="300" y="753" font-size="13" fill="#334155" text-anchor="middle">then "(N more results not shown)"; also stored for replay</text>
+
+  <!-- Audit side branch -->
+  <path d="M520,400 L740,400 L740,502" fill="none" stroke="#2563EB" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow-blue)"/>
+  <text x="752" y="442" font-size="12" font-weight="600" fill="#2563EB">Always, once sent</text>
+  <text x="752" y="458" font-size="12" fill="#64748B">success or failure</text>
+
+  <rect x="580" y="504" width="320" height="60" rx="10" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="740" y="529" font-size="14" font-weight="600" fill="#1E3A8A" text-anchor="middle">Audit observation</text>
+  <text x="740" y="549" font-size="13" fill="#334155" text-anchor="middle">Query + result URLs as literal fields</text>
+  <line x1="740" y1="564" x2="740" y2="590" stroke="#2563EB" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+
+  <rect x="580" y="592" width="320" height="44" rx="10" fill="#EFF6FF" stroke="#2563EB" stroke-width="1.5"/>
+  <text x="740" y="619" font-size="14" font-weight="600" fill="#1E3A8A" text-anchor="middle">Activity log</text>
+</svg>

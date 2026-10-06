@@ -64,6 +64,12 @@ binding (the model SDK adapter refuses the binding's fetch — note the platform
 it, so the platform server itself still needs the token). Every provider, Workers AI included,
 routes through the same Gateway.
 
+The agent's webSearch tool needs the binding transport: it calls `WORKERS_AI.websearch()`, which
+only reaches a Gateway in the Worker's own account. A deployment without gateway mode, or one that
+sets `CF_AI_GATEWAY_USE_BINDING=false`, has no web search, and the tool says so when the agent
+calls it. Searches bill the Gateway's AI Gateway credits (or a Ceramic key stored on the Gateway).
+See [web search](./web-search.md).
+
 Which models the Gateway offers is managed on the **Models** tab of `/admin`, not in the
 environment. `CF_AI_GATEWAY_PROVIDERS` names the providers that are always on, and an admin can
 turn on the others there. Each model is **Enabled**, **Hidden** (out of the model pickers, still
@@ -79,10 +85,11 @@ An admin session can turn on any provider the Gateway serves.
 
 When using `CF_AI_GATEWAY*` in local development, start the server with
 `pnpm run dev-server -- --use-workers-ai-binding` so the server has a `WORKERS_AI` binding for
-the webFetch tool's document-to-Markdown conversion and for the gateway transport above (without
-it, gateway traffic falls back to HTTPS with `CF_AI_GATEWAY_API_TOKEN`). If your dev Gateway
-lives in a different account than the binding, also set `CF_AI_GATEWAY_USE_BINDING=false` — keep
-`--use-workers-ai-binding` on, since the Markdown conversion still needs the binding.
+the webFetch tool's document-to-Markdown conversion, the webSearch tool, and the gateway transport
+above (without it, gateway traffic falls back to HTTPS with `CF_AI_GATEWAY_API_TOKEN`). If your
+dev Gateway lives in a different account than the binding, also set
+`CF_AI_GATEWAY_USE_BINDING=false` — keep `--use-workers-ai-binding` on, since the Markdown
+conversion still needs the binding.
 
 Each gatekeeper's OAuth app must be registered with that gatekeeper's redirect URI (replace the host
 with `PUBLIC_BASE_URL`):
