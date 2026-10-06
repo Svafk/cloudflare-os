@@ -48,6 +48,7 @@ import {
   ShieldCheck,
   Terminal,
   Globe,
+  Binoculars,
   MagnifyingGlass,
   Question,
   ArrowUpRight,
@@ -648,6 +649,14 @@ function getToolCallSummary(
       }
       return { verb: "Fetched", target };
     }
+    case "webSearch": {
+      // `query` may be absent while the tool call's input is still streaming in.
+      const query = tc.input.query;
+      return {
+        verb: "Searched the web for",
+        target: query && query.length > 60 ? `${query.slice(0, 57)}…` : query,
+      };
+    }
     case "observeUserChanges":
       return { verb: "Observed user changes" };
     case "listBlueprints":
@@ -731,6 +740,8 @@ function describeToolCallCount(toolName: AiToolCall["toolName"], count: number):
       return count === 1 ? "Searched files" : `Searched files ${formatTimes(count)}`;
     case "webFetch":
       return `Fetched ${pluralize(count, "page")}`;
+    case "webSearch":
+      return count === 1 ? "Searched the web" : `Searched the web ${formatTimes(count)}`;
     case "executeCode":
       return count === 1 ? "Ran code" : `Ran code ${formatTimes(count)}`;
     case "describeBinding":
@@ -776,6 +787,8 @@ function getToolIcon(
       return Terminal;
     case "webFetch":
       return Globe;
+    case "webSearch":
+      return Binoculars;
     case "grep":
     case "describeBinding":
       return MagnifyingGlass;
@@ -824,6 +837,8 @@ function getProvisionalToolLabel(toolName: AiToolCall["toolName"] | null | undef
       return "Running code";
     case "webFetch":
       return "Fetching web page";
+    case "webSearch":
+      return "Searching the web";
     case "observeUserChanges":
       return "Observing user changes";
     case "giveUp":
@@ -852,6 +867,7 @@ function getProvisionalToolVerb(toolName: AiToolCall["toolName"]): string {
     case "createWorktree": return "Creating worktree";
     case "executeCode": return "Running code";
     case "webFetch": return "Fetching";
+    case "webSearch": return "Searching the web for";
     case "observeUserChanges": return "Observing user changes";
     case "giveUp": return "Stopping";
     case "listBlueprints": return "Listing blueprints";
@@ -871,6 +887,7 @@ function describeProvisionalToolCount(toolName: AiToolCall["toolName"], count: n
     case "editFile": return `Making ${count} edits`;
     case "grep": return `Searching files ${formatTimes(count)}`;
     case "webFetch": return `Fetching ${pluralize(count, "page")}`;
+    case "webSearch": return `Searching the web ${formatTimes(count)}`;
     case "executeCode": return count === 1 ? "Running code" : `Running code ${formatTimes(count)}`;
     case "describeBinding": return `Inspecting ${pluralize(count, "binding")}`;
     case "setBindingHook": return `Connecting ${pluralize(count, "binding")}`;
