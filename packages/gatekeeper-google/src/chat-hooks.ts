@@ -13,7 +13,6 @@
 
 import { DurableObject, RpcTarget, WorkerEntrypoint, type RpcStub } from "cloudflare:workers";
 import { validateRpc } from "capnweb-validate";
-import { createRemoteJWKSet, jwtVerify } from "jose";
 import { SingleFlight } from "@gadgets/gatekeeper-kit/single-flight";
 import type {
   ApprovalQueue, HookController, HookInitiator, HookTargetMetadata,
@@ -21,24 +20,13 @@ import type {
 import { fetchWithAuthRetry, type AccessTokenProvider } from "./auth-retry";
 import { ChatApiError, chatApiFailure, type ChatMessageRaw } from "./chat-api";
 import type { ChatMessageHook } from "./chat-types";
-import { getBaseUrl, type GoogleOAuthEnv } from "./oauth";
+import { HOUR_MS, HookDeliveryQueue, MINUTE_MS, disposeStubs } from "./hook-delivery-queue";
 import { obsContext } from "./observability";
+import type { PushHooksEnv } from "./pubsub-push";
 
 const logger = obsContext.createLogger({ component: "gatekeeper.google.chat-hooks", vendorId: "google" });
 
-/** Deployment settings for push delivery; hooks are unavailable unless both are set. */
-export type ChatHooksEnv = {
-  /** `projects/{project}/topics/{topic}` that Workspace Events publishes to. */
-  PUBSUB_TOPIC?: string;
-  /** The service account the topic's push subscription authenticates as. */
-  PUBSUB_PUSH_SERVICE_ACCOUNT?: string;
-};
-
-type Env = Cloudflare.Env & GoogleOAuthEnv & ChatHooksEnv;
-
-export function chatHooksConfigured(env: ChatHooksEnv): boolean {
-  return !!env.PUBSUB_TOPIC && !!env.PUBSUB_PUSH_SERVICE_ACCOUNT;
-}
+type Env = Cloudflare.Env & PushHooksEnv;
 
 export type ChatMessageHookTarget = RpcTarget & ChatMessageHook;
 
@@ -85,15 +73,10 @@ export class ChatHookController extends WorkerEntrypoint<Env, ChatHookProps>
 
 // ── Driver ──────────────────────────────────────────────────────────
 
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
 /** A subscription that includes resource data lives at most 4 hours. */
 const RENEW_INTERVAL_MS = 3 * HOUR_MS;
 /** Leaves several retries of a failed renewal within the hour before the subscription lapses. */
 const RENEW_RETRY_MS = 15 * MINUTE_MS;
-const MAX_DELIVERY_ATTEMPTS = 8;
-/** Duplicate pushes of a message that needs no further delivery are ignored for this long. */
-const DELIVERED_RETENTION_MS = 24 * HOUR_MS;
 
 type Registration = Omit<ChatHookProps, "key" | "delivery">;
 type Capabilities = {
@@ -101,18 +84,17 @@ type Capabilities = {
   initiator: Fetcher<HookInitiator<ChatMessageHookTarget>>;
 };
 type Subscription = { name: string; expireTime: number; renewAt: number };
-type Pending = { message: ChatMessageRaw; attempts: number; at: number };
-/** A message delivered, skipped or dropped, remembered so a duplicate push doesn't queue it again. */
-type Delivered = { deliveredAt: number };
 
 const registrationKey = (key: string) => `reg:${key}`;
 const capabilitiesKey = (key: string) => `caps:${key}`;
 const subscriptionKey = (authority: string) => `sub:${authority}`;
-const messageKey = (key: string, messageName: string) => `msg:${key}:${messageName}`;
 
 export class ChatHookDriver extends DurableObject<Env> {
   /** Subscription creations in flight, by account, which concurrent enables and renewals join. */
   #subscribing = new SingleFlight();
+  #queue = new HookDeliveryQueue<ChatMessageRaw>(this.ctx.storage, () => {
+    logger.warn("dropped a Chat message after repeated delivery failures", { event: "chat.hooks.delivery.dropped" });
+  });
 
   async register(key: string, registration: Registration, capabilities: Capabilities): Promise<void> {
     const subscription = this.ctx.storage.kv.get<Subscription>(subscriptionKey(registration.authority));
@@ -120,20 +102,16 @@ export class ChatHookDriver extends DurableObject<Env> {
     const replaced = this.ctx.storage.kv.get<Capabilities>(capabilitiesKey(key));
     this.ctx.storage.kv.put(registrationKey(key), registration);
     this.ctx.storage.kv.put(capabilitiesKey(key), capabilities);
-    disposeCapabilities(replaced);
+    disposeStubs(replaced);
     // A reused subscription's renewal may have come due while no hook used it.
     await this.#reschedule();
   }
 
   async unregister(key: string): Promise<void> {
-    disposeCapabilities(this.ctx.storage.kv.get<Capabilities>(capabilitiesKey(key)));
+    disposeStubs(this.ctx.storage.kv.get<Capabilities>(capabilitiesKey(key)));
     this.ctx.storage.kv.delete(registrationKey(key));
     this.ctx.storage.kv.delete(capabilitiesKey(key));
-    // Disabling ends the hook's retries even if it is re-enabled before they are due; the finished
-    // rows still collapse duplicate pushes.
-    for (const [rowKey, row] of this.ctx.storage.kv.list<Pending | Delivered>({ prefix: messageKey(key, "") })) {
-      if (!("deliveredAt" in row)) this.ctx.storage.kv.put<Delivered>(rowKey, { deliveredAt: Date.now() });
-    }
+    this.#queue.cancel(key);
   }
 
   /** Queue the new messages a subscription reported for each hook of its account they match. */
@@ -149,10 +127,7 @@ export class ChatHookDriver extends DurableObject<Env> {
         // other Chat read does.
         if (!message.name || message.sender?.name === authority || message.privateMessageViewer) continue;
         if (registration.threadName !== undefined && message.thread?.name !== registration.threadName) continue;
-        const key = messageKey(regKey.slice("reg:".length), message.name);
-        if (this.ctx.storage.kv.get(key) === undefined) {
-          this.ctx.storage.kv.put<Pending>(key, { message, attempts: 0, at: now });
-        }
+        this.#queue.enqueue(regKey.slice("reg:".length), message.name, message, now);
       }
     }
     await this.#wakeBy(now);
@@ -168,14 +143,7 @@ export class ChatHookDriver extends DurableObject<Env> {
    */
   async alarm(): Promise<void> {
     const now = Date.now();
-    const rows = [...this.ctx.storage.kv.list<Pending | Delivered>({ prefix: "msg:" })];
-    await Promise.all(rows.map(async ([key, row]) => {
-      if ("deliveredAt" in row) {
-        if (row.deliveredAt + DELIVERED_RETENTION_MS <= now) this.ctx.storage.kv.delete(key);
-      } else if (row.at <= now) {
-        await this.#deliver(key, row);
-      }
-    }));
+    await this.#queue.run(now, (hookKey, message) => this.#deliver(hookKey, message));
     const registrations = [...this.#registrations()].map(([, registration]) => registration);
     // Listed up front: a request handled while a renewal awaits may list too, which would
     // invalidate a live iterator.
@@ -198,34 +166,18 @@ export class ChatHookDriver extends DurableObject<Env> {
     await this.#reschedule();
   }
 
-  async #deliver(key: string, pending: Pending): Promise<void> {
-    const capabilities = this.ctx.storage.kv.get<Capabilities>(capabilitiesKey(key.split(":")[1]));
-    if (!capabilities) {
-      this.ctx.storage.kv.delete(key);
-      return;
-    }
+  async #deliver(hookKey: string, message: ChatMessageRaw): Promise<void> {
+    // An unregistered hook's rows are finished, and it gets no new ones.
+    const capabilities = this.ctx.storage.kv.get<Capabilities>(capabilitiesKey(hookKey));
+    if (!capabilities) return;
     try {
       // A refused firing is retried like a failed one, being indistinguishable from a transient
       // failure; disabling or deleting the hook unregisters it, which ends the retries.
       using hook = await capabilities.initiator.startHook();
       // @ts-expect-error Worker RPC's mapped types can't relate an ApprovalQueue stub to itself.
-      await capabilities.delivery.deliver(hook.callback, hook.approvalQueue, pending.message);
-      this.ctx.storage.kv.put<Delivered>(key, { deliveredAt: Date.now() });
-    } catch (error) {
-      // Retry only a message still pending: disabling the hook during this attempt finished it.
-      const row = this.ctx.storage.kv.get<Pending | Delivered>(key);
-      if (!row || "deliveredAt" in row) return;
-      const attempts = pending.attempts + 1;
-      if (attempts >= MAX_DELIVERY_ATTEMPTS) {
-        // No `error`: a hook's exception can quote the private message it failed on.
-        logger.warn("dropped a Chat message after repeated delivery failures", { event: "chat.hooks.delivery.dropped" });
-        this.ctx.storage.kv.put<Delivered>(key, { deliveredAt: Date.now() });
-      } else {
-        const delay = Math.min(MINUTE_MS * 2 ** (attempts - 1), HOUR_MS);
-        this.ctx.storage.kv.put<Pending>(key, { ...pending, attempts, at: Date.now() + delay });
-      }
+      await capabilities.delivery.deliver(hook.callback, hook.approvalQueue, message);
     } finally {
-      disposeCapabilities(capabilities);
+      disposeStubs(capabilities);
     }
   }
 
@@ -278,19 +230,14 @@ export class ChatHookDriver extends DurableObject<Env> {
 
   async #reschedule(): Promise<void> {
     const times: number[] = [];
-    for (const [, row] of this.ctx.storage.kv.list<Pending | Delivered>({ prefix: "msg:" })) {
-      times.push("deliveredAt" in row ? row.deliveredAt + DELIVERED_RETENTION_MS : row.at);
-    }
+    const queueDue = this.#queue.nextDue();
+    if (queueDue !== undefined) times.push(queueDue);
     const authorities = new Set([...this.#registrations()].map(([, registration]) => registration.authority));
     for (const [key, subscription] of this.ctx.storage.kv.list<Subscription>({ prefix: "sub:" })) {
       times.push(authorities.has(key.slice("sub:".length)) ? subscription.renewAt : subscription.expireTime);
     }
     if (times.length > 0) await this.ctx.storage.setAlarm(Math.min(...times));
   }
-}
-
-function disposeCapabilities(capabilities: Capabilities | undefined): void {
-  for (const stub of Object.values(capabilities ?? {}) as Partial<Disposable>[]) stub[Symbol.dispose]?.();
 }
 
 // ── Workspace Events API ────────────────────────────────────────────
@@ -376,46 +323,20 @@ class WorkspaceEventsApi {
   }
 }
 
-// ── Push endpoint ───────────────────────────────────────────────────
+// ── Push ingest ─────────────────────────────────────────────────────
 
-const GOOGLE_JWKS = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
-
-type PubSubPush = {
-  message: { attributes?: Record<string, string>; data?: string };
-};
-
-/**
- * Handle one authenticated Pub/Sub push: queue new messages with their space's driver. A 5xx makes
- * Pub/Sub redeliver; anything not about new messages is acknowledged and ignored.
- */
-export async function handleChatPush(request: Request, env: Env, exports: Cloudflare.Exports): Promise<Response> {
-  if (!chatHooksConfigured(env)) return new Response("Not Found", { status: 404 });
-  try {
-    const token = /^Bearer (\S+)$/.exec(request.headers.get("Authorization") ?? "")?.[1] ?? "";
-    const { payload } = await jwtVerify(token, GOOGLE_JWKS, {
-      issuer: ["https://accounts.google.com", "accounts.google.com"],
-      audience: `${getBaseUrl(env)}/pubsub`,
-    });
-    if (payload.email !== env.PUBSUB_PUSH_SERVICE_ACCOUNT || payload.email_verified !== true) {
-      throw new Error("Unexpected push identity");
-    }
-  } catch {
-    return new Response("Unauthorized", { status: 401 });
-  }
-
-  const { attributes = {}, data = "" } = (await request.json<PubSubPush>()).message;
+/** Queue the new messages one Workspace Events push reports with their space's driver; ignore anything else. */
+export async function ingestChatPush(attributes: Record<string, string>, data: string,
+                                     exports: Cloudflare.Exports): Promise<void> {
   const type = attributes["ce-type"];
   const spaceName = attributes["ce-subject"]?.match(/^\/\/chat\.googleapis\.com\/(spaces\/[^/]+)$/)?.[1];
   const subscription = attributes["ce-source"]?.match(/^\/\/workspaceevents\.googleapis\.com\/(subscriptions\/[^/]+)$/)?.[1];
-  if ((type !== MESSAGE_CREATED && type !== MESSAGES_CREATED) || !spaceName || !subscription) {
-    return new Response(null, { status: 204 });
-  }
-  const event = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(data), c => c.charCodeAt(0)))) as {
+  if ((type !== MESSAGE_CREATED && type !== MESSAGES_CREATED) || !spaceName || !subscription) return;
+  const event = JSON.parse(data) as {
     message?: ChatMessageRaw;
     messages?: { message?: ChatMessageRaw }[];
   };
   const messages = type === MESSAGE_CREATED ? [event.message] : (event.messages ?? []).map(entry => entry.message);
   await exports.ChatHookDriver.getByName(spaceName)
     .ingest(subscription, messages.filter(message => message !== undefined));
-  return new Response(null, { status: 204 });
 }
