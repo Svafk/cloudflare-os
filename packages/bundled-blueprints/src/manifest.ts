@@ -9,6 +9,10 @@ const OUTPUT_ICONS = ["fileText", "gridNine", "presentation", "appWindow", "flow
 // Must match isReservedBlueprintKey() in workshop-backend's src/storage-schema/blueprints-kv.ts.
 const RESERVED_BLUEPRINT_KEYS = new Set([".featured", ".adminConfig"]);
 
+// Roles a blueprint may publish its workspaces at. Duplicated from the shared API's
+// CollaboratorRole for the same reason as OUTPUT_ICONS.
+const PUBLICATION_ROLES = ["use", "build"];
+
 export type BundledBlueprintManifest = {
   blueprintId: string;
   title: string;
@@ -16,6 +20,11 @@ export type BundledBlueprintManifest = {
   output: {id: string; noun: string; plural: string; icon: string};
   author: {type: "user"; name: string; id: string};
   revision: number;
+  /**
+   * Present when a workspace created from this blueprint is published to everyone signed in by
+   * default, at this role. Only the deployment's bundled blueprints are trusted to declare it.
+   */
+  publication?: "use" | "build";
   created: string;
   version: number;
   lastUpdated: string;
@@ -70,7 +79,7 @@ function parsePresentation(
 ): BundledBlueprintPresentation {
   let bad = (message: string): never => { throw new Error(`${label}: ${message}`); };
   let {
-    blueprintId, title, description, output, author, revision, $comment, ...rest
+    blueprintId, title, description, output, author, revision, publication, $comment, ...rest
   } = parsed;
   let unknown = Object.keys(rest).filter(key => !allowedExtra.includes(key));
   if (unknown.length > 0) bad(`unknown keys: ${unknown.join(", ")}`);
@@ -88,6 +97,9 @@ function parsePresentation(
   }
   if (typeof revision !== "number" || !Number.isInteger(revision) || revision < 1) {
     bad("revision must be a positive integer");
+  }
+  if (publication !== undefined && !PUBLICATION_ROLES.includes(publication as string)) {
+    bad(`publication must be one of: ${PUBLICATION_ROLES.join(", ")}`);
   }
   if (typeof output !== "object" || output === null) bad("output is required");
   let { id, noun, plural, icon, ...outputRest } = output as Record<string, unknown>;
@@ -122,5 +134,6 @@ function parsePresentation(
       id: string(authorId, "author.id"),
     },
     revision: revision as number,
+    ...(publication === undefined ? {} : {publication: publication as "use" | "build"}),
   };
 }

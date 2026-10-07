@@ -29,7 +29,9 @@ __tests__/             the build's own tests
 ```
 
 `files/` is the gadget's code. `blueprint.json` contains its install ID, presentation, provenance,
-bindings, blueprint `version`, and bundled `revision`. The build converts these files into the same
+bindings, blueprint `version`, bundled `revision`, and optionally a default `publication` (`"use"`
+or `"build"`): the role a workspace created from it is published with to everyone signed in, unless
+its creator opts out. Only a bundled blueprint can declare one (see docs/blueprints.md). The build converts these files into the same
 gzip-compressed Yjs `.gadget` representation used by uploaded blueprints and embeds it in the
 generated Worker module. No binary archive is committed.
 
@@ -159,8 +161,8 @@ automatically. `revision` remains an explicit reinstall trigger and is bumped by
 
 ## Editing presentation
 
-Edit `blueprint.json` and rebuild. Changes to title, description, output, or author are included in
-the install fingerprint and do not need a `revision` bump.
+Edit `blueprint.json` and rebuild. Changes to title, description, output, author, or publication
+are included in the install fingerprint and do not need a `revision` bump.
 
 ## Updating code
 

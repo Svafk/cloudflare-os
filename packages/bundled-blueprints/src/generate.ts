@@ -172,7 +172,7 @@ export async function generateBundledBlueprintsModule(
 // is rebuilt into archives; legacy BUNDLED_BLUEPRINTS_DIR archives are copied as-is. Built from
 // ${builtFrom}.
 
-import type { AiChatAuthorInfo, BlueprintOutput } from "@gadgets/workshop-shared/api";
+import type { AiChatAuthorInfo, BlueprintOutput, CollaboratorRole } from "@gadgets/workshop-shared/api";
 
 // One bundled blueprint: how to present it, and the archive that says what it does. The build
 // validates the source manifest and files before constructing the archive.
@@ -186,6 +186,10 @@ export type BundledBlueprint = {
   // Bumped when the archive changes, to trigger a reinstall on deployments already holding an
   // older copy. Everything else here is covered by the install fingerprint.
   revision: number;
+
+  // Present when a workspace created from this blueprint is published to everyone signed in by
+  // default, at this role.
+  publication?: CollaboratorRole;
 
   // Fingerprints the generated archive so direct source-file edits trigger a reinstall.
   contentHash: string;
