@@ -96,6 +96,7 @@ export default defineConfig({
           TEST_AGENT_SPAWNER: { className: 'AgentSpawnerGatekeeper', useSQLite: true },
           TEST_USER_DIRECTORY: { className: 'UserDirectoryDurableObject', useSQLite: true },
           TEST_SPACE: { className: 'SpaceDurableObject', useSQLite: true },
+          TEST_SPACE_DIRECTORY: { className: 'SpaceDirectoryDurableObject', useSQLite: true },
         },
       },
     }),
