@@ -11,10 +11,7 @@ export const DRIVE_TYPES_MODULE_PREFIX =
 /** Module-only prefix of the Google Slides declaration. */
 export const SLIDES_TYPES_MODULE_PREFIX =
   'import type { GooglePresentationReadSession } from "./slides-read-types";\n' +
-  "export type {\n" +
-  "  GooglePresentationReadSession, GroupElement, OtherElement, PresentationInfo, ShapeElement,\n" +
-  "  Slide, SlideElement, SlideSize, SlideSummary, TableCell, TableElement,\n" +
-  '} from "./slides-read-types";\n\n';
+  'export type * from "./slides-read-types";\n\n';
 
 /** Remove a declaration's expected module prefix before adding it to the flat agent type bundle. */
 export function stripTypeModulePrefix(source: string, prefix: string): string {
