@@ -8,6 +8,9 @@ export const DRIVE_TYPES_MODULE_PREFIX =
   'import type { GoogleDocReadSession } from "./docs-read-types";\n' +
   'import type { GoogleSpreadsheetReadSession } from "./sheets-types";\n\n';
 
+/** Module-only prefix of the Gmail declaration; the flat vendor bundle gets RpcStub from chat-types instead. */
+export const GMAIL_TYPES_MODULE_PREFIX = 'import type { RpcStub } from "cloudflare:workers";\n\n';
+
 /** Remove a declaration's expected module prefix before adding it to the flat agent type bundle. */
 export function stripTypeModulePrefix(source: string, prefix: string): string {
   if (!source.startsWith(prefix)) {

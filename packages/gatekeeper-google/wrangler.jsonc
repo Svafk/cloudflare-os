@@ -73,6 +73,12 @@
       "new_sqlite_classes": [
         "ChatHookDriver"
       ]
+    },
+    {
+      "tag": "v7",
+      "new_sqlite_classes": [
+        "GmailHookDriver"
+      ]
     }
   ]
 }

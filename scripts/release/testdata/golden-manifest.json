@@ -473,6 +473,12 @@
             "ChatHookDriver"
           ],
           "tag": "v6"
+        },
+        {
+          "new_sqlite_classes": [
+            "GmailHookDriver"
+          ],
+          "tag": "v7"
         }
       ],
       "modules": [

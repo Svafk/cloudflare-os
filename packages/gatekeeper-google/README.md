@@ -148,15 +148,16 @@ User — see Step 4.)
 
 You can also see your connected accounts and add and remove them in the settings (accessed through the account menu in the upper-right).
 
-## Google Chat new-message hooks (optional)
+## Google Chat and Gmail new-message hooks (optional)
 
-Gadgets can watch a Chat conversation for new messages (see `docs/google-chat-capabilities.md`).
-Google delivers them through Workspace Events and Pub/Sub, so this needs a public URL and these
-steps in the same Cloud project as the OAuth client:
+Gadgets can watch a Chat conversation for new messages (see `docs/google-chat-capabilities.md`),
+and a Gmail inbox, label or thread for new mail (`subscribeNewMessages()` in `src/types.d.ts`).
+Google delivers both through Pub/Sub, Chat's by Workspace Events and Gmail's by `users.watch`, so
+this needs a public URL and these steps in the same Cloud project as the OAuth client:
 
-1. Enable the **Google Workspace Events API** and the **Cloud Pub/Sub API**.
-2. Create a Pub/Sub topic, and grant `chat-api-push@system.gserviceaccount.com` the **Pub/Sub
-   Publisher** role on it.
+1. Enable the **Google Workspace Events API**, the **Cloud Pub/Sub API**, and the **Gmail API**.
+2. Create a Pub/Sub topic, and grant both `chat-api-push@system.gserviceaccount.com` and
+   `gmail-api-push@system.gserviceaccount.com` the **Pub/Sub Publisher** role on it.
 3. Create a service account for push authentication (it needs no roles).
 4. Create a **push** subscription on the topic with endpoint
    `${BASE_URL}/pubsub` (e.g. `https://example.com/gatekeeper/google/pubsub`), **Enable
@@ -173,8 +174,10 @@ the worker instead accepts only pushes whose Google-signed token names that endp
 and `PUBSUB_PUSH_SERVICE_ACCOUNT` as sender. That token proves a push came through the push
 subscription, not who published to the topic, so the topic's Pub/Sub principals are trusted with
 hooked messages: anyone who can subscribe to it reads them all, and anyone who can publish to it
-can inject messages into hooks. Grant those roles to no one beyond step 2. Without these settings
-hooks are refused and everything else works as before.
+can inject messages into hooks. Grant those roles to no one beyond step 2. A Gmail push carries
+only a mailbox address and a history ID, so a forged one can only make the worker read that
+mailbox's new history with the connected account's own credentials. Without these settings hooks
+are refused and everything else works as before.
 
 ## Worker Preview OAuth callbacks
 

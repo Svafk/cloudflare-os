@@ -5,6 +5,7 @@
 
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ingestChatPush } from "./chat-hooks";
+import { ingestGmailPush } from "./gmail-hooks";
 import { getBaseUrl, type GoogleOAuthEnv } from "./oauth";
 
 /** Deployment settings for Google push delivery; Chat and Gmail hooks are unavailable unless both are set. */
@@ -56,5 +57,6 @@ export async function handlePubSubPush(request: Request, env: Cloudflare.Env & G
     return new Response(null, { status: 204 });
   }
   if (attributes["ce-type"] !== undefined) await ingestChatPush(attributes, text, exports);
+  else await ingestGmailPush(text, exports);
   return new Response(null, { status: 204 });
 }

@@ -8,6 +8,11 @@ export const HOUR_MS = 60 * MINUTE_MS;
 export const MAX_DELIVERY_ATTEMPTS = 8;
 /** Duplicate pushes of a message that needs no further delivery are ignored for this long. */
 export const DELIVERED_RETENTION_MS = 24 * HOUR_MS;
+/**
+ * Deliveries one run starts together; the rest stay due, so the alarm a driver reschedules for the
+ * past takes them next.
+ */
+export const MAX_DELIVERIES_PER_RUN = 20;
 
 /** A queued delivery of `message` to one hook, and when it is next tried. */
 type Pending<Message> = { message: Message; attempts: number; at: number };
@@ -38,8 +43,9 @@ export class HookDeliveryQueue<Message> {
   }
 
   /**
-   * Sweep expired finished rows, then attempt the due rows, oldest `at` first, concurrently. A row
-   * is finished once `deliver` resolves, and retried with backoff when it throws.
+   * Sweep expired finished rows, then attempt up to `MAX_DELIVERIES_PER_RUN` due rows, oldest
+   * `at` first, concurrently. A row is finished once `deliver` resolves, and retried with backoff
+   * when it throws.
    */
   async run(now: number, deliver: (hookKey: string, message: Message) => Promise<void>): Promise<void> {
     const due: [string, Pending<Message>][] = [];
@@ -51,7 +57,8 @@ export class HookDeliveryQueue<Message> {
       }
     }
     due.sort(([, a], [, b]) => a.at - b.at);
-    await Promise.all(due.map(([key, pending]) => this.#attempt(key, pending, deliver)));
+    await Promise.all(due.slice(0, MAX_DELIVERIES_PER_RUN)
+      .map(([key, pending]) => this.#attempt(key, pending, deliver)));
   }
 
   /** The earliest time the queue needs the alarm (a pending `at`, or a finished row's expiry), or undefined. */
