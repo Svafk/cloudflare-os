@@ -1,7 +1,7 @@
 import { RpcStub, RpcTarget, newHttpBatchRpcResponse, newWebSocketRpcSession, RpcSessionOptions } from "capnweb";
 import { validateRpc } from "capnweb-validate";
 import type { JWTPayload } from "jose";
-import { PublicApi, AuthenticatedApi, Overseer, GadgetMetadataWithTimestamps, AiChatAuthorInfo, RedactedAiModelConfig, AiGatewayInfo, AiModelProvider, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, ObserverConfigCallback, BlueprintLibrarySummary, BlueprintPublicInfo, BlueprintUserSummary, BlueprintBindingAssignment, AgentSpawnerConfig, WorkpieceId, BLUEPRINT_SCREENSHOT_PATH_PREFIX, BLUEPRINT_SCREENSHOT_R2_PREFIX, blueprintScreenshotUrl, ServerConfig, CloudflareUsageInfo, CloudflareAccountOption, LoginAttempt, GatekeeperAppInfo, AdminApi, GatekeeperVendorInfo, OutputFormatOffer, ListOutputsResult, UserDirectoryRecord, Space, SpaceInfo, createOpenGadgetError, getOpenGadgetErrorCode, OPEN_GADGET_ERROR_CODES, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart } from '@gadgets/workshop-shared/api';
+import { PublicApi, AuthenticatedApi, Overseer, GadgetMetadataWithTimestamps, AiChatAuthorInfo, RedactedAiModelConfig, AiGatewayInfo, AiModelProvider, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, ObserverConfigCallback, BlueprintLibrarySummary, BlueprintPublicInfo, BlueprintUserSummary, BlueprintBindingAssignment, BLUEPRINT_SCREENSHOT_PATH_PREFIX, BLUEPRINT_SCREENSHOT_R2_PREFIX, blueprintScreenshotUrl, ServerConfig, CloudflareUsageInfo, CloudflareAccountOption, LoginAttempt, GatekeeperAppInfo, AdminApi, GatekeeperVendorInfo, OutputFormatOffer, ListOutputsResult, UserDirectoryRecord, Space, SpaceInfo, createOpenGadgetError, getOpenGadgetErrorCode, OPEN_GADGET_ERROR_CODES, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart } from '@gadgets/workshop-shared/api';
 import type { UiFeatureFlags } from "@gadgets/workshop-shared/feature-flags";
 import { getServerConfig } from "./deployment-config.js";
 import { isPasswordAuthEnabled, getAuthGatekeeperAllowlist } from "./auth/config.js";
@@ -10,7 +10,7 @@ import { getUsageInfo } from "./ai-gateway-billing/limits/usage-checker.js";
 import { listConnectedAccounts, selectAccount } from "./ai-gateway-billing/cloudflare/connection-service.js";
 import { PendingLogin, LoginConnectCallbackImpl, EXPIRED_MESSAGE } from "./auth/login-flow.js";
 import { hashPresentedSecret, newSecretToken } from "./connect-handoff.js";
-import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from "./admin-config.js";
+import { listFormatOffers, readAdminConfig } from "./admin-config.js";
 
 // Re-export the optional-feature Durable Objects + entrypoints so they can be bound in wrangler.
 export { PendingLogin, LoginConnectCallbackImpl };
@@ -18,7 +18,8 @@ import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
 import { LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
-import { buildBlueprintArchiveStream, sanitizeBlueprintOutput, parseBlueprintArchive, randomBlueprintId, readBlueprintContent } from "./blueprint-archive.js";
+import { buildBlueprintArchiveStream, parseBlueprintArchive, randomBlueprintId } from "./blueprint-archive.js";
+import { fromApiOptions, newWorkspaceFromBlueprint } from "./blueprint-instantiation.js";
 import { BlueprintKvRecord, listFeaturedBlueprintsFromKv, readBlueprintKvRecord } from "./storage-schema/blueprints-kv.js";
 import { GatekeeperConnectCallbackImpl, normalizeUsername, UserDurableObject, CLOUDFLARE_VENDOR_ID } from "./user";
 import { OverseerDurableObject, GatekeeperLoopback, CodeModeTailLoopback, AgentSpawnerGatekeeper, GatekeeperHookLoopback, GadgetTailLoopback, AgentSelfLoopback } from "./overseer";
@@ -500,123 +501,12 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   async newGadgetFromBlueprint(
     blueprintId: string,
     bindings: Record<string, BlueprintBindingAssignment>,
-    spaceKey?: string
+    options?: string | { spaceKey?: string; parentId?: string; publish?: boolean }
   ): Promise<RpcStub<Overseer>> {
-    if (spaceKey !== undefined) checkTeamSpaceKey(spaceKey);
-
-    // 1. Read blueprint from KV.
-    let kvRecord = await readBlueprintKvRecord(this.env, blueprintId);
-    if (!kvRecord) throw new Error("Blueprint not found.");
-
-    // 2. Read gzip-compressed Yjs doc from R2 and decompress.
-    let codeBytes = await readBlueprintContent(this.env, blueprintId, kvRecord.metadata.version);
-    if (!codeBytes) throw new Error("Blueprint content not found in R2.");
-
-    // 3. Create new Overseer DO (same as newGadget()).
-    let id = this.overseers.newUniqueId().toString();
-    await this.#user.newGadget(id, kvRecord.metadata.title, spaceKey);
-    let overseerResult = await this.#openGadgetInternal(id);
-
-    // 4. Initialize from blueprint code.
-    let overseerDo = this.overseers.get(this.overseers.idFromString(id));
-    await overseerDo.initializeFromBlueprint(codeBytes, kvRecord.metadata.title,
-        deploymentOutputForBlueprint(await readAdminConfig(this.env), blueprintId,
-            sanitizeBlueprintOutput(kvRecord.metadata.output)));
-
-    // 5. Create gatekeepers from assignments and bind them into the workspace's (only) gadget.
-    let metadata = await overseerResult.getMetadata();
-    using gadget = await overseerResult.getGadget(metadata.defaultGadgetId!);
-
-    // Defensively put blueprint bindings into a map (not a raw object) until we've had a chance to
-    // validate the names.
-    let blueprintBindings = new Map(Object.entries(kvRecord.metadata.bindings));
-    let gadgetId = metadata.defaultGadgetId!;
-
-    // Create gatekeepers in two phases: first every non-spawner binding (binding the
-    // non-spawnerOnly ones into the gadget, and recording each created gatekeeper's id by
-    // binding name), then the agent spawners, whose configs reference the phase-one results
-    // symbolically (see SpawnerEnvTarget).
-    let createdIds = new Map<string, WorkpieceId>();
-    let gkPromises: Promise<void>[] = [];
-
-    for (let [bindingName, assignment] of Object.entries(bindings)) {
-      let blueprintBinding = blueprintBindings.get(bindingName);
-      if (!blueprintBinding) {
-        throw new Error(`Unknown binding name: ${bindingName}`);
-      }
-
-      gkPromises.push((async () => {
-        let gk;
-        if (assignment.type === "gatekeeper") {
-          gk = await overseerResult.newGatekeeper(assignment.accountId, assignment.resourceUrl);
-          if (!gk) {
-            throw new Error(`Failed to create gatekeeper for binding "${bindingName}".`);
-          }
-        } else if (assignment.type === "aiModel") {
-          gk = await overseerResult.newAiModelGatekeeper(assignment.modelId);
-        } else {
-          return;  // agent spawners are created in phase two
-        }
-        try {
-          let id = await gk.getId();
-          createdIds.set(bindingName, id);
-          // A spawnerOnly binding exists purely to feed some spawner's env; it is not bound
-          // into the gadget itself.
-          if (!blueprintBinding.spawnerOnly) {
-            await gadget.bind(bindingName, id);
-          }
-        } finally {
-          gk[Symbol.dispose]();
-        }
-      })());
-    }
-
-    await Promise.all(gkPromises);
-
-    // Phase two: agent spawners, with the full AgentSpawnerConfig reconstructed -- displayName
-    // from the binding's title, modelId from the assignment, and env resolved against the
-    // phase-one gatekeepers and the new gadget.
-    for (let [bindingName, assignment] of Object.entries(bindings)) {
-      if (assignment.type !== "agentSpawner") continue;
-      let blueprintBinding = blueprintBindings.get(bindingName);
-      if (blueprintBinding?.type !== "agentSpawner") {
-        throw new Error(`Binding "${bindingName}" type mismatch.`);
-      }
-
-      let env: Record<string, WorkpieceId> = {};
-      for (let [envName, target] of Object.entries(blueprintBinding.env)) {
-        if (target.type === "gadget") {
-          env[envName] = gadgetId;
-        } else {
-          let id = createdIds.get(target.name);
-          if (id === undefined) {
-            throw new Error(`Agent spawner binding "${bindingName}" references binding ` +
-                `"${target.name}", which was not assigned.`);
-          }
-          env[envName] = id;
-        }
-      }
-
-      let config: AgentSpawnerConfig = {
-        displayName: blueprintBinding.title,
-        modelId: assignment.modelId,
-        env,
-      };
-      using gk = await overseerResult.newAgentSpawnerGatekeeper(config);
-      await gadget.bind(bindingName, await gk.getId());
-    }
-
-    recordAnalytics(this.ctx, this.env, {
-      event_name: "gadget_created",
-      user_id: this.#userId.toString(),
-      gadget_id: id,
-      blueprint_id: blueprintId,
-      source: "blueprint",
-    });
-
     // @ts-expect-error Cap'n Web RPC stubs and native RPC stubs are compatible but the type
     //     system doesn't know this.
-    return overseerResult;
+    return newWorkspaceFromBlueprint(this.ctx, this.env, this.#user,
+        id => this.#openGadgetInternal(id), blueprintId, bindings, fromApiOptions(options));
   }
 
   async deleteOrphanedBlueprint(blueprintId: string): Promise<void> {

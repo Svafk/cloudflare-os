@@ -215,5 +215,9 @@ export async function parseBlueprintArchive(archive: ReadableStream<Uint8Array>)
   }
 
   let metadata = reviveBlueprintMetadata(rawMetadata);
+  // A default publication is trusted only from the deployment's bundled blueprints, and is read
+  // from what this Worker was built with (see bundledPublication()), so an archive never brings
+  // one into a stored blueprint.
+  delete metadata.publication;
   return { metadata, contentLength, content: reader.takeTail() };
 }

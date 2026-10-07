@@ -10,7 +10,7 @@
 // no reserved id prefix, no fallback branch in the read path. Failure is tolerable: a deployment
 // with none installed simply has no standard formats.
 
-import { BlueprintMetadata, BlueprintPublicInfo } from "@gadgets/workshop-shared/api";
+import { BlueprintMetadata, BlueprintPublicInfo, CollaboratorRole } from "@gadgets/workshop-shared/api";
 import { parseBlueprintArchive } from "./blueprint-archive.js";
 import type { BlueprintKvRecord } from "./storage-schema/blueprints-kv.js";
 import { BundledBlueprint, BUNDLED_BLUEPRINTS } from "./generated/bundled-blueprints.js";
@@ -28,13 +28,28 @@ type InstallEnv = Pick<Cloudflare.Env, "BLUEPRINTS" | "BLUEPRINT_CONTENT">;
  * Everything that ends up in the installed metadata contributes, not just `revision`: editing a
  * description would otherwise build, deploy, and change nothing on a deployment that had already
  * installed. `contentHash` covers the generated archive, including direct edits to source files.
+ * A publication is fingerprinted only where one is declared, so that declaring none leaves a
+ * blueprint's fingerprint as the deployments that installed it recorded it, reinstalling nothing.
  */
 export function bundledBlueprintsManifestVersion(): string {
   return BUNDLED_BLUEPRINTS
       .map(e => `${e.blueprintId}@${e.revision}+${e.contentHash}+` +
-          fingerprint(JSON.stringify([e.title, e.description, e.author, e.output])))
+          fingerprint(JSON.stringify([e.title, e.description, e.author, e.output,
+            ...(e.publication ? [e.publication] : [])])))
       .toSorted()
       .join(",");
+}
+
+/**
+ * The role a workspace created from blueprint `blueprintId`, whose record is `record`, is
+ * published with by default: the one its bundled entry declares, if the deployment ships that
+ * blueprint and the record is the one it installed, which has no owner. Never read from the
+ * record's metadata: only what this Worker was built with is trusted to publish a workspace.
+ */
+export function bundledPublication(blueprintId: string, record: BlueprintKvRecord)
+    : CollaboratorRole | undefined {
+  if (record.ownerId !== undefined) return undefined;
+  return BUNDLED_BLUEPRINTS.find(entry => entry.blueprintId === blueprintId)?.publication;
 }
 
 // Install one bundled blueprint, returning its public info for the featured mirror.
@@ -55,14 +70,15 @@ async function installOne(env: InstallEnv, entry: BundledBlueprint)
   }
 
   // The archive supplies what the blueprint does -- code, bindings, and the dates from the
-  // workspace it was exported from. How it is presented comes from its source manifest, overwriting
-  // whatever the archive carries.
+  // workspace it was exported from. How it is presented, and the publication it declares, come
+  // from its source manifest, overwriting whatever the archive carries.
   let installed: BlueprintMetadata = {
     ...metadata,
     title: entry.title,
     description: entry.description,
     author: entry.author,
     output: entry.output,
+    ...(entry.publication && {publication: entry.publication}),
   };
 
   // Content first: a blueprint whose metadata exists but whose R2 object doesn't is broken, while

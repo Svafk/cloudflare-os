@@ -8117,7 +8117,8 @@ class OverseerImpl implements AgentHooks {
     }
 
     // Apply the deployment's overrides, so a gadget the agent builds is labelled the same as one
-    // the user makes from the New menu (see newGadgetFromBlueprint, which does the same).
+    // the user makes from the New menu (see newWorkspaceFromBlueprint in
+    // blueprint-instantiation.ts, which does the same).
     let output = deploymentOutputForBlueprint(await readAdminConfig(this.env), blueprintId,
         sanitizeBlueprintOutput(kvRecord.metadata.output));
 
@@ -9511,11 +9512,12 @@ export class OverseerDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   /**
-   * Initialize this workspace's default gadget from a blueprint's code snapshot. Called by
-   * AuthenticatedApi.newGadgetFromBlueprint() after creating (and opening) the DO.
+   * Initialize this workspace's default gadget from a blueprint's code snapshot, and publish the
+   * workspace at `publicAccess`, if given. Called by newWorkspaceFromBlueprint() (see
+   * blueprint-instantiation.ts) after creating (and opening) the DO.
    */
-  async initializeFromBlueprint(code: Uint8Array, title: string, output?: BlueprintOutput)
-      : Promise<void> {
+  async initializeFromBlueprint(code: Uint8Array, title: string, output?: BlueprintOutput,
+                                publicAccess?: CollaboratorRole): Promise<void> {
     // Set the title. The default gadget (created below) inherits it.
     this.impl.storage.title.put(title);
 
@@ -9570,6 +9572,12 @@ export class OverseerDurableObject extends DurableObject<Cloudflare.Env> {
       record.output = output;
       this.impl.storage.gadgets.put(record);
     }
+
+    // Published before the activity report below, which states it (see `restrictions`), so that
+    // the workspace's space first lists it published, under its title. Nothing has been observed
+    // here yet, so neither flag that rules out a publication is set; raising a publication never
+    // restarts the workspace.
+    if (publicAccess) this.impl.setPublicAccess(publicAccess);
 
     // Mark gadget as non-provisional (it has code, so it should appear in the gadget list).
     // (A write, so deliberately not retried -- a reset can't distinguish "never applied" from
