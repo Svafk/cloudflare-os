@@ -191,6 +191,10 @@ export type BundledBlueprint = {
   // default, at this role.
   publication?: CollaboratorRole;
 
+  // The gadget methods a space sync may call on a workspace created from this blueprint, see
+  // docs/space-sync.md. Absent when a space sync may call none.
+  importMethods?: string[];
+
   // Fingerprints the generated archive so direct source-file edits trigger a reinstall.
   contentHash: string;
 
