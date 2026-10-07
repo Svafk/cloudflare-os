@@ -7,7 +7,7 @@
 import { createTypedStorage, collection } from "@gadgets/typed-storage";
 import type {
   AiChatAuthorInfo, AiModelConfig, BlueprintMetadata, BlueprintOutput, CollaboratorRole,
-  GadgetMetadata, SpaceInfo, WorkpieceId,
+  GadgetMetadata, SpaceInfo, SpaceSyncJobInfo, WorkpieceId,
 } from "@gadgets/workshop-shared/api";
 import type { AccountDescription, GatekeeperUser } from "@gadgets/workshop-shared/gatekeeper";
 
@@ -220,6 +220,13 @@ export function makeUserStorage(storage: DurableObjectStorage) {
       // only: a space's own member list is the authority, and nothing is authorized from this.
       spaces: collection<SpaceInfo>()({
         primaryKey: "key",
+      }),
+      // The user's space-sync jobs (see UserDurableObject.startSpaceSync()), each the authority on
+      // what the account running it may still do for it: the loopback that account holds acts
+      // only while the job here is "running". Every running job is kept, and the most recently
+      // ended of those that have ended.
+      spaceSyncJobs: collection<SpaceSyncJobInfo>()({
+        primaryKey: "jobId",
       }),
     },
     singletons: {
